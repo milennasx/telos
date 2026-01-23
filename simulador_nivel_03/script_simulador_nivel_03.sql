@@ -16,11 +16,12 @@ CREATE TABLE Users (
 
 CREATE TABLE Loans (
     loan_id SERIAL PRIMARY KEY,
-    book_id INT REFERENCES Books(book_id),
-    user_id INT REFERENCES Users(user_id),
-    loan_date DATE,-- Dúvida: seria uma informação obrigatória(ex:dados inputados no momento do empréstimo) ou não
+    book_id INT NOT NULL REFERENCES Books(book_id) ON DELETE RESTRICT,
+    user_id INT NOT NULL REFERENCES Users(user_id) ON DELETE RESTRICT,
+    loan_date DATE NOT NULL,
     return_date DATE
 );
+
 
 
 INSERT INTO Books (title, author, genre, published_year) VALUES
@@ -99,7 +100,7 @@ WHERE name = 'Jean Cavalcante';
 
 -- Deletando Milenna da biblioteca
 DELETE FROM Users
-WHERE name = 'Milenna Xavier'; -- O que aconteceria se Milenna tivesse um empréstimo em aberto?
+WHERE name = 'Milenna Xavier'; 
 
 -- Procurando usuários
 SELECT * FROM Users WHERE name ILIKE '%jessi%';
@@ -128,13 +129,53 @@ WHERE book_id NOT IN (
 );
 
 -- Empréstimo
-INSERT INTO Loans (book_id, user_id, loan_date) 
-VALUES (20, (SELECT user_id FROM Users WHERE name = 'Ronald Oliveira'), '2026-01-05');
+CREATE OR REPLACE PROCEDURE register_loan(
+    p_book_id INT,
+    p_user_id INT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 
+        FROM Loans 
+        WHERE book_id = p_book_id 
+          AND return_date IS NULL
+    ) THEN
+        RAISE EXCEPTION 'Livro atualmente emprestado';
+    END IF;
+
+    INSERT INTO Loans (book_id, user_id, loan_date)
+    VALUES (p_book_id, p_user_id, CURRENT_DATE);
+
+    RAISE NOTICE 'Empréstimo realizado com sucesso!';
+END;
+$$;
+
+CALL register_loan(10, 2);
+
 
 -- Devolução
-UPDATE Loans 
-SET return_date = '2026-01-13' 
-WHERE book_id = 20 AND return_date IS NULL;
+CREATE OR REPLACE PROCEDURE register_return(
+    p_book_id INT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE Loans 
+    SET return_date = CURRENT_DATE 
+    WHERE book_id = p_book_id 
+      AND return_date IS NULL;
+
+    IF NOT FOUND THEN
+        RAISE NOTICE 'Nenhum empréstimo encontrado';
+    ELSE
+        RAISE NOTICE 'Livro devolvido com sucesso!';
+    END IF;
+END;
+$$;
+
+CALL register_return(15);
 
 
 -- Relatórios
